@@ -4,18 +4,19 @@ import pytz
 from dotenv import load_dotenv
 import os
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+    MessageHandler,
+    filters,
     ContextTypes,
     CallbackContext,
+    ConversationHandler,
 )
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-moscow_tz = pytz.timezone("Europe/Moscow")
 
 
 MESSAGES = [
@@ -26,6 +27,21 @@ MESSAGES = [
     "Ты не один. Я рядом 🤗",
 ]
 
+TIMEZONE = range(1)
+
+TIMEZONE_OPTIONS = [
+    'Europe/Moscow',
+    'Europe/Kaliningrad',
+    'Asia/Yekaterinburg',
+    'Asia/Novosibirsk',
+    'Asia/Krasnoyarsk',
+    'Asia/Irkutsk',
+    'Asia/Yakutsk',
+    'Asia/Vladivostok',
+    'Asia/Magadan',
+    'Asia/Sakhalin',
+    'Asia/Kamchatka',
+]
 
 async def daily_message(context: CallbackContext):
     message = random.choice(MESSAGES)
@@ -34,23 +50,33 @@ async def daily_message(context: CallbackContext):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    await update.message.reply_text("Привет! Я твой друг 🤗 Я буду присылать тебе тёплые слова каждый день в 09:00.")
+    keyboard = [[tz] for tz in TIMEZONE_OPTIONS]
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
-    current_time = datetime.datetime.now(moscow_tz)
-    print(f"Текущее время по Москве: {current_time}")
+    await update.message.reply_text(
+        "Привет! Я твой друг 🤗 Я буду присылать тебе тёплые слова каждый день в 09:00.\n"
+        "Для этого выбери свой часовой пояс из списка:",
+        reply_markup=reply_markup
+    )
+    return TIMEZONE
+
+
+async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_timezone = update.message.text
+
+    if user_timezone not in pytz.all_timezones:
+        await update.message.reply_text("Пожалуйста, выбери часовой пояс из предложенного списка.")
+        return TIMEZONE
+
+    chat_id = update.effective_chat.id
+    tz = pytz.timezone(user_timezone)
 
     job_queue = context.application.job_queue
     jobs = job_queue.get_jobs_by_name(str(chat_id))
-    if not jobs:
-        print(f"Задачи для {chat_id} не найдены. Запускаем новую задачу.")
     for job in jobs:
-        print(f"Удаление старой задачи {job.name}")
         job.schedule_removal()
 
-    scheduled_time = datetime.time(hour=23, minute=8, tzinfo=moscow_tz)
-    print(f"Запланировано отправить сообщение в {scheduled_time} по Москве")
-
+    scheduled_time = datetime.time(hour=9, minute=0, tzinfo=tz)
     job_queue.run_daily(
         callback=daily_message,
         time=scheduled_time,
@@ -58,9 +84,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name=str(chat_id),
     )
 
+    await update.message.reply_text(f"Отлично! Теперь я буду писать тебе каждый день в 09:00 по времени {user_timezone}.")
+    return ConversationHandler.END
+
 
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
+    },
+    fallbacks=[],
+)
+
+app.add_handler(conv_handler)
 
 app.run_polling()
