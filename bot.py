@@ -30,17 +30,33 @@ MESSAGES = [
 TIMEZONE = range(1)
 
 TIMEZONE_OPTIONS = [
-    'Europe/Moscow',
-    'Europe/Kaliningrad',
-    'Asia/Yekaterinburg',
-    'Asia/Novosibirsk',
-    'Asia/Krasnoyarsk',
-    'Asia/Irkutsk',
-    'Asia/Yakutsk',
-    'Asia/Vladivostok',
-    'Asia/Magadan',
-    'Asia/Sakhalin',
-    'Asia/Kamchatka',
+    ("UTC−12:00", "Etc/GMT+12"),
+    ("UTC−11:00", "Etc/GMT+11"),
+    ("UTC−10:00 (Гавайи)", "Etc/GMT+10"),
+    ("UTC−09:00 (Аляска)", "Etc/GMT+9"),
+    ("UTC−08:00 (Калифорния)", "Etc/GMT+8"),
+    ("UTC−07:00 (Денвер)", "Etc/GMT+7"),
+    ("UTC−06:00 (Центральная Америка)", "Etc/GMT+6"),
+    ("UTC−05:00 (Нью-Йорк, Торонто)", "Etc/GMT+5"),
+    ("UTC−04:00 (Каракас)", "Etc/GMT+4"),
+    ("UTC−03:00 (Буэнос-Айрес)", "Etc/GMT+3"),
+    ("UTC−02:00", "Etc/GMT+2"),
+    ("UTC−01:00", "Etc/GMT+1"),
+    ("UTC±00:00 (Лондон)", "Etc/GMT"),
+    ("UTC+01:00 (Берлин, Париж)", "Etc/GMT-1"),
+    ("UTC+02:00 (Киев, Афины)", "Etc/GMT-2"),
+    ("UTC+03:00 (Москва, Стамбул)", "Etc/GMT-3"),
+    ("UTC+04:00 (Баку, Дубай)", "Etc/GMT-4"),
+    ("UTC+05:00 (Ташкент, Екатеринбург)", "Etc/GMT-5"),
+    ("UTC+06:00 (Алматы, Бишкек)", "Etc/GMT-6"),
+    ("UTC+07:00 (Бангкок, Новосибирск)", "Etc/GMT-7"),
+    ("UTC+08:00 (Пекин, Иркутск)", "Etc/GMT-8"),
+    ("UTC+09:00 (Токио, Якутск)", "Etc/GMT-9"),
+    ("UTC+10:00 (Владивосток, Сидней)", "Etc/GMT-10"),
+    ("UTC+11:00 (Сахалин)", "Etc/GMT-11"),
+    ("UTC+12:00 (Камчатка, Магадан)", "Etc/GMT-12"),
+    ("UTC+13:00", "Etc/GMT-13"),
+    ("UTC+14:00", "Etc/GMT-14"),
 ]
 
 async def daily_message(context: CallbackContext):
@@ -50,7 +66,7 @@ async def daily_message(context: CallbackContext):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[tz] for tz in TIMEZONE_OPTIONS]
+    keyboard = [[label] for label, _ in TIMEZONE_OPTIONS]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
     await update.message.reply_text(
@@ -62,14 +78,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_timezone = update.message.text
+    user_choice = update.message.text
+    tz_name = next((tz for label, tz in TIMEZONE_OPTIONS if label == user_choice), None)
 
-    if user_timezone not in pytz.all_timezones:
+    if tz_name is None:
         await update.message.reply_text("Пожалуйста, выбери часовой пояс из предложенного списка.")
         return TIMEZONE
 
     chat_id = update.effective_chat.id
-    tz = pytz.timezone(user_timezone)
+    tz = pytz.timezone(tz_name)
 
     job_queue = context.application.job_queue
     jobs = job_queue.get_jobs_by_name(str(chat_id))
@@ -84,7 +101,7 @@ async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name=str(chat_id),
     )
 
-    await update.message.reply_text(f"Отлично! Теперь я буду писать тебе каждый день в 09:00 по времени {user_timezone}.")
+    await update.message.reply_text(f"Отлично! Теперь я буду писать тебе каждый день в 09:00 по времени {user_choice}.")
     return ConversationHandler.END
 
 
