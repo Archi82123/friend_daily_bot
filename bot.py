@@ -4,16 +4,16 @@ import pytz
 from dotenv import load_dotenv
 import os
 
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
-    filters,
     ContextTypes,
     CallbackContext,
     ConversationHandler,
+    CallbackQueryHandler
 )
+
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -59,6 +59,7 @@ TIMEZONE_OPTIONS = [
     ("UTC+14:00", "Etc/GMT-14"),
 ]
 
+
 async def daily_message(context: CallbackContext):
     message = random.choice(MESSAGES)
     print(f"Отправка сообщения: {message}")
@@ -66,27 +67,29 @@ async def daily_message(context: CallbackContext):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[label] for label, _ in TIMEZONE_OPTIONS]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    keyboard = []
+    for tz_label, tz_value in TIMEZONE_OPTIONS:
+        keyboard.append([InlineKeyboardButton(text=tz_label, callback_data=tz_value)])
+
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     await update.message.reply_text(
-        "Привет! Я твой друг 🤗 Я буду присылать тебе тёплые слова каждый день в 09:00.\n"
-        "Для этого выбери свой часовой пояс из списка:",
+        "Привет! Я твой друг 🤗 Я буду присылать тебе тёплые слова каждый день. Для этого мне нужно знать твой часовой пояс. Пожалуйста, выбери свой из списка:",
         reply_markup=reply_markup
     )
     return TIMEZONE
 
 
 async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_choice = update.message.text
-    tz_name = next((tz for label, tz in TIMEZONE_OPTIONS if label == user_choice), None)
+    query = update.callback_query
+    user_timezone = update.callback_query.data
 
-    if tz_name is None:
-        await update.message.reply_text("Пожалуйста, выбери часовой пояс из предложенного списка.")
+    if user_timezone not in pytz.all_timezones:
+        await query.answer("Пожалуйста, выбери часовой пояс из предложенного списка.")
         return TIMEZONE
 
-    chat_id = update.effective_chat.id
-    tz = pytz.timezone(tz_name)
+    chat_id = query.message.chat.id
+    tz = pytz.timezone(user_timezone)
 
     job_queue = context.application.job_queue
     jobs = job_queue.get_jobs_by_name(str(chat_id))
@@ -101,20 +104,23 @@ async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name=str(chat_id),
     )
 
-    await update.message.reply_text(f"Отлично! Теперь я буду писать тебе каждый день в 09:00 по времени {user_choice}.")
+    await query.edit_message_text(
+        f"Отлично! Теперь я буду писать тебе каждый день в 09:00."
+    )
+    print(query.data)
     return ConversationHandler.END
 
 
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-conv_handler = ConversationHandler(
+conversation_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
-        TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
+        TIMEZONE: [CallbackQueryHandler(set_timezone)],
     },
     fallbacks=[],
 )
 
-app.add_handler(conv_handler)
+app.add_handler(conversation_handler)
 
 app.run_polling()
