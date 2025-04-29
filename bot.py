@@ -16,54 +16,26 @@ from telegram.ext import (
     filters
 )
 
+from constants import (
+    GREETING_MESSAGE,
+    INVALID_TIME_FORMAT_MESSAGE,
+    SET_TIME_PROMPT,
+    ERROR_NO_TIMEZONE,
+    CONFIRMATION_MESSAGE,
+    INVALID_TIMEZONE_SELECTED,
+    DAILY_MESSAGES,
+    TIMEZONE_OPTIONS
+)
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 
-MESSAGES = [
-    "Ты справишься с любыми трудностями 💪",
-    "Ты достоин счастья ✨",
-    "Ты — лучший человек для самого себя 💖",
-    "Сегодня обязательно произойдёт что-то хорошее 🌞",
-    "Ты не один. Я рядом 🤗",
-]
-
 TIMEZONE, TIME_SELECTION = range(2)
-
-TIMEZONE_OPTIONS = [
-    ("UTC−12:00", "Etc/GMT+12"),
-    ("UTC−11:00", "Etc/GMT+11"),
-    ("UTC−10:00 (Гавайи)", "Etc/GMT+10"),
-    ("UTC−09:00 (Аляска)", "Etc/GMT+9"),
-    ("UTC−08:00 (Калифорния)", "Etc/GMT+8"),
-    ("UTC−07:00 (Денвер)", "Etc/GMT+7"),
-    ("UTC−06:00 (Центральная Америка)", "Etc/GMT+6"),
-    ("UTC−05:00 (Нью-Йорк, Торонто)", "Etc/GMT+5"),
-    ("UTC−04:00 (Каракас)", "Etc/GMT+4"),
-    ("UTC−03:00 (Буэнос-Айрес)", "Etc/GMT+3"),
-    ("UTC−02:00", "Etc/GMT+2"),
-    ("UTC−01:00", "Etc/GMT+1"),
-    ("UTC±00:00 (Лондон)", "Etc/GMT"),
-    ("UTC+01:00 (Берлин, Париж)", "Etc/GMT-1"),
-    ("UTC+02:00 (Киев, Афины)", "Etc/GMT-2"),
-    ("UTC+03:00 (Москва, Стамбул)", "Etc/GMT-3"),
-    ("UTC+04:00 (Баку, Дубай)", "Etc/GMT-4"),
-    ("UTC+05:00 (Ташкент, Екатеринбург)", "Etc/GMT-5"),
-    ("UTC+06:00 (Алматы, Бишкек)", "Etc/GMT-6"),
-    ("UTC+07:00 (Бангкок, Новосибирск)", "Etc/GMT-7"),
-    ("UTC+08:00 (Пекин, Иркутск)", "Etc/GMT-8"),
-    ("UTC+09:00 (Токио, Якутск)", "Etc/GMT-9"),
-    ("UTC+10:00 (Владивосток, Сидней)", "Etc/GMT-10"),
-    ("UTC+11:00 (Сахалин)", "Etc/GMT-11"),
-    ("UTC+12:00 (Камчатка, Магадан)", "Etc/GMT-12"),
-    ("UTC+13:00", "Etc/GMT-13"),
-    ("UTC+14:00", "Etc/GMT-14"),
-]
 
 
 async def daily_message(context: CallbackContext):
-    message = random.choice(MESSAGES)
+    message = random.choice(DAILY_MESSAGES)
     print(f"Отправка сообщения: {message}")
     await context.bot.send_message(chat_id=context.job.chat_id, text=message)
 
@@ -76,7 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     await update.message.reply_text(
-        "Привет! Я твой друг 🤗 Я буду присылать тебе тёплые слова каждый день. Для этого мне нужно знать твой часовой пояс. Пожалуйста, выбери свой из списка:",
+        GREETING_MESSAGE,
         reply_markup=reply_markup
     )
     return TIMEZONE
@@ -89,13 +61,13 @@ async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_timezone = query.data
 
     if user_timezone not in pytz.all_timezones:
-        await query.answer("Пожалуйста, выбери часовой пояс из списка.")
+        await query.answer(INVALID_TIMEZONE_SELECTED)
         return TIMEZONE
 
     context.user_data["timezone"] = user_timezone
 
     await query.edit_message_text(
-        "Отлично! Теперь напиши, в какое время ты хочешь получать сообщение.\n\nФормат: ЧЧ:ММ (например, 09:00 или 18:30)"
+        SET_TIME_PROMPT
     )
     return TIME_SELECTION
 
@@ -106,14 +78,14 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_time = datetime.datetime.strptime(user_input, "%H:%M").time()
     except ValueError:
-        await update.message.reply_text("Неверный формат времени. Пожалуйста, введи время в формате ЧЧ:ММ (например, 09:00).")
+        await update.message.reply_text(INVALID_TIME_FORMAT_MESSAGE)
         return TIME_SELECTION
 
     chat_id = update.message.chat.id
     timezone_str = context.user_data.get("timezone")
 
     if not timezone_str:
-        await update.message.reply_text("Что-то пошло не так. Пожалуйста, начни сначала с команды /start.")
+        await update.message.reply_text(ERROR_NO_TIMEZONE)
         return ConversationHandler.END
 
     tz = pytz.timezone(timezone_str)
@@ -132,7 +104,7 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name=str(chat_id)
     )
 
-    await update.message.reply_text(f"Готово! Теперь я буду присылать сообщения каждый день в {user_input} по времени {timezone_str}.")
+    await update.message.reply_text(CONFIRMATION_MESSAGE.format(time=user_input, timezone=timezone_str))
     return ConversationHandler.END
 
 
