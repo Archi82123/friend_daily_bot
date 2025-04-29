@@ -117,20 +117,19 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     tz = pytz.timezone(timezone_str)
+    user_time_with_tz = datetime.time(hour=user_time.hour, minute=user_time.minute, tzinfo=tz)
 
-    # Удаляем старые задания
+
     job_queue = context.application.job_queue
     jobs = job_queue.get_jobs_by_name(str(chat_id))
     for job in jobs:
         job.schedule_removal()
 
-    # Назначаем новое задание
     job_queue.run_daily(
         callback=daily_message,
-        time=user_time,
+        time=user_time_with_tz,
         chat_id=chat_id,
-        name=str(chat_id),
-        tzinfo=tz
+        name=str(chat_id)
     )
 
     await update.message.reply_text(f"Готово! Теперь я буду присылать сообщения каждый день в {user_input} по времени {timezone_str}.")
@@ -140,12 +139,20 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 conversation_handler = ConversationHandler(
-    entry_points=[CommandHandler("start", start)],
+    entry_points=[
+        CommandHandler("start", start),
+    ],
     states={
-        TIMEZONE: [CallbackQueryHandler(set_timezone)],
-        TIME_SELECTION: [CommandHandler("start", start), MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
+        TIMEZONE: [
+            CallbackQueryHandler(set_timezone)
+        ],
+        TIME_SELECTION: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, set_time),
+            CommandHandler("start", start),  # позволяет сбросить на любом шаге
+        ],
     },
-    fallbacks=[],
+    fallbacks=[
+    ],
 )
 
 app.add_handler(conversation_handler)
