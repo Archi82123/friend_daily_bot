@@ -11,7 +11,9 @@ from telegram.ext import (
     ContextTypes,
     CallbackContext,
     ConversationHandler,
-    CallbackQueryHandler
+    CallbackQueryHandler,
+    MessageHandler,
+    filters
 )
 
 
@@ -27,7 +29,7 @@ MESSAGES = [
     "Ты не один. Я рядом 🤗",
 ]
 
-TIMEZONE = range(1)
+TIMEZONE, TIME_SELECTION = range(2)
 
 TIMEZONE_OPTIONS = [
     ("UTC−12:00", "Etc/GMT+12"),
@@ -82,32 +84,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_timezone = update.callback_query.data
+    await query.answer()
+
+    user_timezone = query.data
 
     if user_timezone not in pytz.all_timezones:
-        await query.answer("Пожалуйста, выбери часовой пояс из предложенного списка.")
+        await query.answer("Пожалуйста, выбери часовой пояс из списка.")
         return TIMEZONE
 
-    chat_id = query.message.chat.id
-    tz = pytz.timezone(user_timezone)
+    context.user_data["timezone"] = user_timezone
 
+    await query.edit_message_text(
+        "Отлично! Теперь напиши, в какое время ты хочешь получать сообщение.\n\nФормат: ЧЧ:ММ (например, 09:00 или 18:30)"
+    )
+    return TIME_SELECTION
+
+
+async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text.strip()
+
+    try:
+        user_time = datetime.datetime.strptime(user_input, "%H:%M").time()
+    except ValueError:
+        await update.message.reply_text("Неверный формат времени. Пожалуйста, введи время в формате ЧЧ:ММ (например, 09:00).")
+        return TIME_SELECTION
+
+    chat_id = update.message.chat.id
+    timezone_str = context.user_data.get("timezone")
+
+    if not timezone_str:
+        await update.message.reply_text("Что-то пошло не так. Пожалуйста, начни сначала с команды /start.")
+        return ConversationHandler.END
+
+    tz = pytz.timezone(timezone_str)
+
+    # Удаляем старые задания
     job_queue = context.application.job_queue
     jobs = job_queue.get_jobs_by_name(str(chat_id))
     for job in jobs:
         job.schedule_removal()
 
-    scheduled_time = datetime.time(hour=9, minute=0, tzinfo=tz)
+    # Назначаем новое задание
     job_queue.run_daily(
         callback=daily_message,
-        time=scheduled_time,
+        time=user_time,
         chat_id=chat_id,
         name=str(chat_id),
+        tzinfo=tz
     )
 
-    await query.edit_message_text(
-        f"Отлично! Теперь я буду писать тебе каждый день в 09:00."
-    )
-    print(query.data)
+    await update.message.reply_text(f"Готово! Теперь я буду присылать сообщения каждый день в {user_input} по времени {timezone_str}.")
     return ConversationHandler.END
 
 
@@ -117,6 +143,7 @@ conversation_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
         TIMEZONE: [CallbackQueryHandler(set_timezone)],
+        TIME_SELECTION: [CommandHandler("start", start), MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
     },
     fallbacks=[],
 )
