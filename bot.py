@@ -24,7 +24,10 @@ from constants import (
     CONFIRMATION_MESSAGE,
     INVALID_TIMEZONE_SELECTED,
     DAILY_MESSAGES,
-    TIMEZONE_OPTIONS
+    TIMEZONE_OPTIONS,
+    CHOOSE_YOUR_TIMEZONE,
+    MOSCOW_TIME_ZONE,
+    OTHER_TIME_ZONE
 )
 
 load_dotenv()
@@ -41,9 +44,10 @@ async def daily_message(context: CallbackContext):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = []
-    for tz_label, tz_value in TIMEZONE_OPTIONS:
-        keyboard.append([InlineKeyboardButton(text=tz_label, callback_data=tz_value)])
+    keyboard = [
+        [InlineKeyboardButton(MOSCOW_TIME_ZONE, callback_data="Etc/GMT-3")],
+        [InlineKeyboardButton(OTHER_TIME_ZONE, callback_data="SHOW_ALL")]
+    ]
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -59,6 +63,18 @@ async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_timezone = query.data
+
+    if user_timezone == "SHOW_ALL":
+        keyboard = [
+            [InlineKeyboardButton(text=label, callback_data=value)]
+            for label, value in TIMEZONE_OPTIONS
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            CHOOSE_YOUR_TIMEZONE,
+            reply_markup=reply_markup
+        )
+        return TIMEZONE
 
     if user_timezone not in pytz.all_timezones:
         await query.answer(INVALID_TIMEZONE_SELECTED)
