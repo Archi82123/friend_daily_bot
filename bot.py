@@ -4,7 +4,10 @@ import pytz
 from dotenv import load_dotenv
 import os
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -34,8 +37,14 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 
-TIMEZONE, TIME_SELECTION = range(2)
+TIMEZONE, TIME_SELECTION, MAIN_MENU = range(3)
 
+MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
+    keyboard=[
+        ["🕒 Изменить время отправки", "🌍 Изменить часовой пояс"]
+    ],
+    resize_keyboard=True
+)
 
 async def daily_message(context: CallbackContext):
     message = random.choice(DAILY_MESSAGES)
@@ -120,27 +129,44 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name=str(chat_id)
     )
 
-    await update.message.reply_text(CONFIRMATION_MESSAGE.format(time=user_input, timezone=timezone_str))
-    return ConversationHandler.END
+    await update.message.reply_text(CONFIRMATION_MESSAGE.format(time=user_input, timezone=timezone_str),
+        reply_markup=MAIN_MENU_KEYBOARD)
+    return MAIN_MENU
+
+
+async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+
+    if text == "🕒 Изменить время отправки":
+        await update.message.reply_text("Напиши новое время в формате ЧЧ:ММ:")
+        return TIME_SELECTION
+
+    elif text == "🌍 Изменить часовой пояс":
+        return await start(update, context)
+
+    else:
+        await update.message.reply_text("Я пока не знаю, как на это ответить.")
+        return MAIN_MENU
+    
 
 
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 conversation_handler = ConversationHandler(
     entry_points=[
-        CommandHandler("start", start),
+        CommandHandler("start", start)
     ],
     states={
         TIMEZONE: [
-            CallbackQueryHandler(set_timezone)
+            CallbackQueryHandler(set_timezone),
         ],
         TIME_SELECTION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, set_time),
-            CommandHandler("start", start),  # позволяет сбросить на любом шаге
+            MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)
+           
         ],
+         MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)],
     },
-    fallbacks=[
-    ],
+    fallbacks=[],
 )
 
 app.add_handler(conversation_handler)
