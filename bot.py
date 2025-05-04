@@ -157,14 +157,9 @@ conversation_handler = ConversationHandler(
         CommandHandler("start", start)
     ],
     states={
-        TIMEZONE: [
-            CallbackQueryHandler(set_timezone),
-        ],
-        TIME_SELECTION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)
-           
-        ],
-         MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)],
+        TIMEZONE: [CallbackQueryHandler(set_timezone),],
+        TIME_SELECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
+        MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)],
     },
     fallbacks=[],
 )
